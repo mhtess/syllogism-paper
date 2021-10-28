@@ -1,0 +1,73 @@
+// time webppl venn-mll-refac.wppl --require webppl-csv --require vennUtils --require ~/tools/webppl-sample-writer-fork --random-seed 2344512342 4
+
+var args = process.argv
+var chain = last(args) // load index as last command line index
+
+// var alternative_set = alternatives[pragmatics.alternatives]
+
+var modelObj = {
+  M00_LIT_LIT,
+	M01_LIT_PRAG_BELIEF,
+	M02_LIT_PRAG_STATE//,
+	// M10_PRAG_STATE_LIT,
+	// M11_PRAG_STATE_PRAG_BELIEF,
+	// M12_PRAG_STATE_PRAG_STATE,
+	// M20_PRAG_QUD_LIT,
+	// M21_PRAG_QUD_PRAG_BELIEF,
+	// M22_PRAG_QUD_PRAG_STATE
+}
+
+var pragmaticListenerModels = [
+	"M10_PRAG_STATE_LIT"
+]
+
+var pragmaticSpeakerModels = [
+	"M00_LIT_LIT",
+	"M01_LIT_PRAG_BELIEF",
+	"M02_LIT_PRAG_STATE",
+	"M10_PRAG_STATE_LIT"
+]
+
+var modelIndices = _.keys(modelObj)
+var modelIndex = (chain - 1) % modelIndices.length
+display(modelIndex)
+var modelName = modelIndices[modelIndex]
+display(modelName)
+
+var pragSpeakModel = true//pragmaticSpeakerModels.indexOf(modelName) > -1
+var pragListenModel = pragmaticListenerModels.indexOf(modelName) > -1
+// display(modelHasWeights)
+var chain_num = Math.ceil(chain / modelIndices.length)
+display(chain_num)
+
+var bda_model = modelObj[modelName]
+
+// var steps = 1000 // 2 hours per sample
+// var steps = 2000 // 4 hours per sample
+var steps = 5000 // 10 hours per sample
+var samples = 10
+
+var outfile = 'refac-ais-0paramPrior-syllogisms-ragni2016_full_' +
+	modelName + "_" +
+  steps + '-steps_' +
+  samples + '-samples_iter' + chain_num + '.csv'
+
+
+var resultsOutFile = "results/mll/"
+var fileHandle = webpplCsv.openFile(resultsOutFile + outfile)
+var header_to_write = ["modelName", "steps", "iter", "weight"].join(",")
+webpplCsv.writeLine(header_to_write, fileHandle)
+var weights = map(function(i) {
+
+  display(i)
+	 var weight = AIS(bda_model, {samples: 1, steps: steps})
+	 var line_to_write = [modelName, steps, i, weight].join(",")
+ 	 webpplCsv.writeLine(line_to_write, fileHandle)
+
+}, _.range(samples))
+
+webpplCsv.closeFile(fileHandle)
+
+"written to " + resultsOutFile + outfile;
+
+// weights;

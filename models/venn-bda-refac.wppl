@@ -1,0 +1,72 @@
+// NEW SPACE OF MODELS: 11/3/2020
+
+// time webppl venn-bda-refac.wppl --require webppl-csv --require vennUtils --require ~/tools/webppl-sample-writer-fork --random-seed 2344512342 7
+
+var args = process.argv
+var chain = last(args) // load index as last command line index
+
+// var alternative_set = alternatives[pragmatics.alternatives]
+
+var modelObj = {
+  M00_LIT_LIT,
+	M01_LIT_PRAG_BELIEF,
+	M02_LIT_PRAG_STATE//,
+	// M10_PRAG_STATE_LIT,
+	// M11_PRAG_STATE_PRAG_BELIEF,
+	// M12_PRAG_STATE_PRAG_STATE,
+	// M20_PRAG_QUD_LIT,
+	// M21_PRAG_QUD_PRAG_BELIEF,
+	// M22_PRAG_QUD_PRAG_STATE
+}
+
+var pragmaticListenerModels = [
+	"M10_PRAG_STATE_LIT"
+]
+
+var pragmaticSpeakerModels = [
+	"M00_LIT_LIT",
+	"M01_LIT_PRAG_BELIEF",
+	"M02_LIT_PRAG_STATE",
+	"M10_PRAG_STATE_LIT"
+]
+
+var modelIndices = _.keys(modelObj)
+var modelIndex = (chain - 1) % modelIndices.length
+display(modelIndex)
+var modelName = modelIndices[modelIndex]
+display(modelName)
+
+var pragSpeakModel = true//pragmaticSpeakerModels.indexOf(modelName) > -1
+var pragListenModel = pragmaticListenerModels.indexOf(modelName) > -1
+// display(modelHasWeights)
+var chain_num = Math.ceil(chain / modelIndices.length)
+display(chain_num)
+
+var bda_model = modelObj[modelName]
+
+// var totalIterations = 1000, lag =  1;
+// var totalIterations = 5000, lag =  0;
+// var totalIterations = 100, lag =  0;
+var totalIterations = 10000, lag =  1;
+// var totalIterations = 4, lag =  0;
+
+var samples = totalIterations/(lag + 1), burn = totalIterations / 2;
+
+var outfile = 'refac-bda-0paramPrior-syllogisms-ragni2016_full_' +
+	modelName + "_" +
+  totalIterations+ '_burn' + burn +
+  '_lag' + lag + '_chain' + chain_num + '.csv'
+
+var header = "iter,type,premise_1,premise_2,conclusion,val,score"
+var callback = webpplSampleWriter.streamQueryCSV("results/" + outfile, header);
+
+Infer({model: bda_model,
+      samples: samples, burn: burn, lag: lag,
+       method: 'incrementalMH',
+       onlyMAP: true,
+       verbose: T,
+       verboseLag: totalIterations / 20,
+       callbacks: [callback]
+     });
+
+"written to " + outfile;

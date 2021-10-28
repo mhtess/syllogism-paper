@@ -1,0 +1,235 @@
+---
+title: "model-results"
+author: "MH Tessler"
+date: "11/13/2020"
+output: pdf_document
+---
+
+```{r}
+library(tidyverse)
+library(tidyboot)
+library(ggplot2)
+library(ggthemes)
+library(knitr)
+library(coda)
+library(purrr)
+library(viridis)
+library(RColorBrewer)
+
+theme_set(theme_few())
+estimate_mode <- function(s) {
+  d <- density(s)
+  return(d$x[which.max(d$y)])
+}
+HPDhi<- function(s){
+  m <- HPDinterval(mcmc(s))
+  return(m["var1","upper"])
+}
+HPDlo<- function(s){
+  m <- HPDinterval(mcmc(s))
+  return(m["var1","lower"])
+}
+```
+
+# RSA models
+
+```{r}
+
+md.summary <- read_csv("../cached_results/md_summary_0paramPrior.csv")
+
+md.summary %>%
+    mutate(model = factor(model,
+                        levels = c("M00_LIT_LIT", "M02_LIT_PRAG_STATE",
+                                   "M01_LIT_PRAG_BELIEF"),
+                        labels = c("Literal Speaker",
+                                   "State Communication\n(Pragmatic Speaker)",
+                                   "Belief Alignment\n(Pragmatic Speaker)")),
+         conclusion_quantifier = factor(conclusion_quantifier,
+                                        levels = c("All", "Some", "Some not", "No", "NVC"),
+                                        labels = c("All", "Some", "Some...not", "None",
+                                                   "nothing follows"))) %>%
+  ggplot(., aes( x = MAP, y = mean, 
+                 fill = conclusion_quantifier,
+                 xmin = cred_lower, xmax = cred_upper,
+                 ymin = ci_lower, ymax = ci_upper))+
+  geom_abline(intercept = 0, slope = 1, lty = 3, alpha = 0.3)+
+  geom_linerange(alpha = 0.4)+
+  ggstance::geom_linerangeh( alpha = 0.4 )+
+  geom_point(shape = 21, size = 1.5)+
+  scale_x_continuous(limits = c(0, 1), breaks = c(0, 1))+
+  scale_y_continuous(limits = c(0, 1), breaks = c(0, 1))+
+  # facet_grid(interpretation ~ production)+
+  guides(fill = guide_legend(title = "Conclusion quantifier"))+
+  facet_wrap( ~ model, nrow = 1)+
+  coord_fixed(ratio = 1)+
+  labs(
+    x = "Model Prediction",
+    y = "Human Conclusions\n(proportion)"
+  )
+```
+
+
+```{r}
+md.summary %>%
+  group_by(model) %>%
+  summarize(
+    r = cor(MAP, mean),
+    r2 = r^2,
+    mse = mean((MAP-mean) ^2 )
+  )  -> md.summary.stats
+```
+
+# PHM and mReasoner models
+```{r}
+df.ragni.altModel.full.summary <-read_csv(file = "../cached_results/phm-mReasoner-ragni-summary.csv")
+```
+
+```{r}
+df.ragni.altModel.full.summary %>%
+  mutate(model = factor(model,
+                        levels = c("mReasoner-Group", "PHM-Group",
+                                   "mReasoner-Indiv", "PHM-Indiv"),
+                        labels = c("mReasoner\n(group-level model)",
+                                   "Probability Heuristics\n(group-level model)",
+                                   "mReasoner\n(individual-level model)",
+                                   "Probability Heuristics\n(individual-level model)")),
+         conclusion_quantifier = factor(conclusion_quantifier,
+                                        levels = c("All", "Some", "Some not", "No", "NVC"),
+                                        labels = c("All", "Some", "Some...not", "None",
+                                                   "nothing follows"))) %>%
+  ggplot(., aes( x = model_mean, xmin = model_lower, xmax = model_upper, 
+                 fill = conclusion_quantifier,
+                 y = mean, ymin = ci_lower, ymax = ci_upper))+
+  geom_abline(intercept = 0, slope = 1, lty = 3, alpha = 0.3)+
+  geom_linerange(alpha = 0.4)+
+  ggstance::geom_linerangeh( alpha = 0.4 )+
+  geom_point(shape = 21, size = 1.5)+
+  scale_x_continuous(limits = c(0, 1), breaks = c(0, 1))+
+  scale_y_continuous(limits = c(0, 1), breaks = c(0, 1))+
+  #xlim(0, 1) + ylim(0, 1)+
+  coord_fixed()+
+  guides(fill = guide_legend(title = "Conclusion quantifier"))+
+  #scale_fill
+  #scale_fill_viridis(discrete = T, option = "E")+
+  facet_wrap(~model, nrow = 1)+
+  labs(
+    x = "Model Prediction (mean)",
+    y = "Human Conclusions\n(proportion)"
+  )
+
+# ggsave("alternative_model_scatters.pdf", width = 9, height = 3)
+```
+
+```{r}
+df.ragni.altModel.full.summary %>%
+  group_by(model) %>%
+  summarize(
+    r = cor(mean, model_mean),
+    r2 = r^2,
+    mse = mean((model_mean-mean) ^2 )
+  ) %>%
+  ungroup() -> df.altmodel.stats 
+
+
+bind_rows(md.summary.stats,# %>% select(-r2),
+  df.altmodel.stats) %>% 
+  mutate(model = factor(model,
+                        levels = c("M01_LIT_PRAG_BELIEF",
+                                   "M02_LIT_PRAG_STATE",
+                                   "M00_LIT_LIT", 
+                                  "mReasoner-Group", "PHM-Group",
+                                   "mReasoner-Indiv", "PHM-Indiv"),
+                        labels = c("Belief Alignment",
+                                   "State Communication",
+                                   "Literal Speaker",
+                                    "mReasoner (group)",
+                                   "Probability Heuristics (group)",
+                                   "mReasoner (individual)",
+                                   "Probability Heuristics (individual)")),
+         nParameters = c(3, 3, 3, 4,  556,5, 695)) %>%
+  select(model, nParameters, r, r2, mse) -> allModels_table
+
+
+allModels_table[c(2, 3, 1, 4, 5, 6, 7), ]%>%
+  write_csv("../csv_to_tex/allModels_stats_0paramPriors.csv")
+  # kable(.)
+```
+
+
+## Analysis of "Nothing follows"
+
+```{r}
+df.ragni.altModel.full.summary %>%
+  
+  mutate(model = factor(model,
+                        levels = c("mReasoner-Group", "PHM-Group",
+                                   "mReasoner-Indiv", "PHM-Indiv"),
+                        labels = c("mReasoner\n(group-level model)",
+                                   "Probability Heuristics\n(group-level model)",
+                                   "mReasoner\n(individual-level model)",
+                                   "Probability Heuristics\n(individual-level model)")),
+         conclusion_quantifier = factor(conclusion_quantifier,
+                                        levels = c("All", "Some", "Some not", "No", "NVC"),
+                                        labels = c("All", "Some", "Some...not", "None",
+                                                   "nothing follows"))) %>%
+  filter(conclusion_quantifier == "nothing follows") %>%
+  ggplot(., aes( x = model_mean, xmin = model_lower, xmax = model_upper, 
+                 fill = conclusion_quantifier,
+                 y = mean, ymin = ci_lower, ymax = ci_upper))+
+  geom_abline(intercept = 0, slope = 1, lty = 3, alpha = 0.3)+
+  geom_linerange(alpha = 0.4)+
+  ggstance::geom_linerangeh( alpha = 0.4 )+
+  geom_point(shape = 21, size = 1.5)+
+  scale_x_continuous(limits = c(0, 1), breaks = c(0, 1))+
+  scale_y_continuous(limits = c(0, 1), breaks = c(0, 1))+
+  #xlim(0, 1) + ylim(0, 1)+
+  coord_fixed()+
+  guides(fill = guide_legend(title = "Conclusion quantifier"))+
+  #scale_fill
+  #scale_fill_viridis(discrete = T, option = "E")+
+  facet_wrap(~model, nrow = 1)+
+  labs(
+    x = "Model Prediction (mean)",
+    y = "Human Conclusions\n(proportion)"
+  )
+
+```
+
+
+```{r}
+df.ragni.altModel.full.summary %>%
+  filter(conclusion_quantifier == "NVC") %>%
+  group_by(model) %>%
+  summarize(
+    r = cor(model_mean, mean),
+    r2 = r^2,
+    mse = mean((model_mean-mean) ^2 )
+  ) %>%
+  kable(.)
+```
+
+
+Specific examples
+
+```{r}
+
+bar.width = 0.8
+df.ragni.altModel.full.summary %>%
+  filter(premise_1 == "Some;A;B", premise_2 == "No;B;C") %>%
+  mutate(Conclusion = factor(conclusion, 
+                          levels = c("All;A;C","All;C;A", 
+                                     "Some;A;C", "Some;C;A", 
+                                     "Some not;A;C", "Some not;C;A", 
+                                     "No;A;C", "No;C;A", "NVC;"),
+                          labels = c("All A are C", "All C are A",
+                                     "Some A are C", "Some C are A",
+                                     "Some A are not C", "Some C are not A",
+                                     "No A are C", "No C are A",
+                                     "Nothing follows"))) %>%
+  ggplot(., aes(x=model, fill=Conclusion, 
+                 y=model_mean, ymin=model_lower, ymax=model_upper))+
+  geom_col(position = position_dodge(bar.width), width = bar.width, color = 'black',
+           alpha = 0.8)+
+  geom_linerange(position = position_dodge(bar.width))
+```
+
