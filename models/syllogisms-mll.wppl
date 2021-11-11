@@ -34,9 +34,8 @@ display(modelIndex)
 var modelName = modelIndices[modelIndex]
 display(modelName)
 
-var pragSpeakModel = true//pragmaticSpeakerModels.indexOf(modelName) > -1
+var pragSpeakModel = true
 var pragListenModel = pragmaticListenerModels.indexOf(modelName) > -1
-// display(modelHasWeights)
 var chain_num = Math.ceil(chain / modelIndices.length)
 display(chain_num)
 
@@ -69,5 +68,3 @@ var weights = map(function(i) {
 webpplCsv.closeFile(fileHandle)
 
 "written to " + resultsOutFile + outfile;
-
-// weights;

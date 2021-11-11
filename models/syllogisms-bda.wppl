@@ -1,6 +1,6 @@
-// NEW SPACE OF MODELS: 11/3/2020
 
-// time webppl venn-bda-refac.wppl --require webppl-csv --require vennUtils --require ~/tools/webppl-sample-writer-fork --random-seed 2344512342 7
+// Example call from command line:
+// webppl venn-bda-refac.wppl --require webppl-csv --require vennUtils --require ~/tools/webppl-sample-writer-fork --random-seed 2344512342 7
 
 var args = process.argv
 var chain = last(args) // load index as last command line index
@@ -36,19 +36,15 @@ display(modelIndex)
 var modelName = modelIndices[modelIndex]
 display(modelName)
 
-var pragSpeakModel = true//pragmaticSpeakerModels.indexOf(modelName) > -1
+var pragSpeakModel = true
 var pragListenModel = pragmaticListenerModels.indexOf(modelName) > -1
-// display(modelHasWeights)
 var chain_num = Math.ceil(chain / modelIndices.length)
 display(chain_num)
 
 var bda_model = modelObj[modelName]
 
-// var totalIterations = 1000, lag =  1;
-// var totalIterations = 5000, lag =  0;
-// var totalIterations = 100, lag =  0;
-var totalIterations = 10000, lag =  1;
-// var totalIterations = 4, lag =  0;
+// should be run for at least 10000 iterations to get valid estimates
+var totalIterations = 10, lag =  1;
 
 var samples = totalIterations/(lag + 1), burn = totalIterations / 2;
 
