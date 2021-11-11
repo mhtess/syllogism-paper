@@ -8,7 +8,7 @@ Wrapper scripts intended to be run from R using the [`rwebppl package`](https://
 
 ### Rational Speech Act models: Generate (posterior) distribution on Conclusions given syllogism
 - File: `syllogisms-r.wppl`
-- Description: Run RSA models for different syllogisms. File runs a loop over syllogisms, and different RSA models.
+- Description: Run RSA model(s) for different syllogisms. File runs a loop over syllogisms and different RSA models.
 
 ### Literal interpretation: Generate (posterior) distribution on States given syllogism (Fig. 5)
 - File: `syllogisms-literalListener-r.wppl`
@@ -17,11 +17,12 @@ Wrapper scripts intended to be run from R using the [`rwebppl package`](https://
 
 ## Bayesian Data Analysis models
 
-These models are intended to be run for long MCMC chains, taking on the order 12 - 72 hours on a CPU. These models were run a cluster using an [`sbatch`](https://slurm.schedmd.com/sbatch.html) script.
+These models are intended to be run for long MCMC chains, taking on the order 12 - 72 hours on a CPU depending on the number of iterations. These models were run on a computing cluster using an [`sbatch`](https://slurm.schedmd.com/sbatch.html) script.
 
 In addition to the internal WebPPL package `vennUtils` (found in `node_modules`), these scripts require two external WebPPL packages:
 - [`webppl-csv`](https://github.com/mhtess/webppl-csv): Read and write CSV files
 - [`webppl-sample-writer`](https://github.com/mhtess/webppl-sample-writer): To stream posterior samples to file
 
+The scripts to run the data analysis models are:
 - `syllogisms-bda.wppl`: Data analysis model for inferring model parameters given cognitive models and syllogistic reasoning data
 - `syllogisms-ais.wppl`: Data analysis model for computing marginal likelihood of data using Annealed Importance Sampling
