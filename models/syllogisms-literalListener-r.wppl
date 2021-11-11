@@ -1,47 +1,30 @@
-// Generate posterior distributions over conclusions
-// for different syllogisms and different models
-
-// Description of models can be found in `node_modules/vennUtils_oneShot/src/`
+// Generate posterior distributions over states (regions of Venn diagram)
+// for different syllogisms (Figure 5 in paper)
 
 // intended to be called from R, using rwebppl
+
 // EXAMPLE CALL from R:
 // webppl(
-//   program_file = "syllogisms-r.wppl",
-//   data = c("M00_LIT_LIT", "M01_LIT_PRAG_BELIEF", "M02_LIT_PRAG_STATE"),
+//   program_file = "syllogisms-literalListener-r.wppl",
+//   data = c("M0_LIT"),
 //   data_var = "dataFromR",
 //   packages = c("./node_modules/vennUtils_oneShot")
 // )
 
 // could also be run on command line by setting
-// var modelNames = ["M00_LIT_LIT", "M01_LIT_PRAG_BELIEF", "M02_LIT_PRAG_STATE"]
+// var modelNames = ["M0_LIT"]
 // commenting out var modelNames = dataFromR
 // and running
 // webppl --require vennUtils_oneShot syllogisms-literalListener-r.wppl
 
 var modelNames = dataFromR
-
-var modelObj = {
-  M00_LIT_LIT,
-	M01_LIT_PRAG_BELIEF,
-	M02_LIT_PRAG_STATE,
-	M10_PRAG_STATE_LIT,
-	M11_PRAG_STATE_PRAG_BELIEF,
-	M12_PRAG_STATE_PRAG_STATE,
-	M20_PRAG_QUD_LIT,
-	M21_PRAG_QUD_PRAG_BELIEF,
-	M22_PRAG_QUD_PRAG_STATE
-}
+var modelObj = { M0_LIT }
 
 var parameters = {
-	speakerOptimality: {
-		alpha_1 : 1.5,
-		alpha_2 : 6
-	},
 	noise: 0,
-	firstTermPrefWeight: 2,
-	nvcWeight: 1,
-	regionProbs: [0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25]
-	// regions: [C, B, BC, A,  AC, AB, ABC]
+	regionProbs: [
+		0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25
+	] // [C, B, BC, A,  AC, AB, ABC]
 }
 
 var syllogisms = [
@@ -59,6 +42,7 @@ var syllogisms = [
 	]
 ]
 
+
 _.fromPairs(map(function(syllogism){
 
 	var returnVal = map(function(modelName){
@@ -70,7 +54,8 @@ _.fromPairs(map(function(syllogism){
 	var second_sentence = syllogism.length > 1 ? formatSentence(syllogism[1]) : ""
 
 	return [
-		formatSentence(syllogism[0]) + "/" + second_sentence, _.fromPairs(returnVal)
+		formatSentence(syllogism[0]) + "/" + second_sentence,
+		_.fromPairs(returnVal)
 	]
 
 }, syllogisms))
