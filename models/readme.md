@@ -31,11 +31,11 @@ The scripts to run the data analysis models are:
 # WebPPL packages containing different RSA models and helper scripts
 
 The RSA model variants are written in individual files grouped together as a WebPPL package.
-There is one package for running models as one-off demos `vennUtils_oneShot`. There is another package for running the BDA models, which run the RSA models for many iterations: (`vennUtils`).
-Both packages can be found inside `node_modules/`
+There is one package for running models as one-off demos: `vennUtils_oneShot`. There is another package for running the BDA models, which run the RSA models for many iterations: `vennUtils`.
+Both packages can be found inside `node_modules/`.
 To learn more about WebPPL packages, [read the docs](https://webppl.readthedocs.io/en/master/packages.html)
 
-The `src/` folder inside of the package folder inside of `node_modules` contains RSA models and helper scripts.
+The `src/` folder inside of the package folder inside of `node_modules/` contains RSA models and helper scripts.
 
 ## RSA Models
 
