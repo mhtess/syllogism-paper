@@ -1,16 +1,19 @@
 ---
-title: "CCOBRA data set BDA"
+title: "Analysis of CCOBRA data set and RSA models"
+author: "MH Tessler"
 output: 
   html_document:
     toc: true
     toc_float: true
 ---
 
+# Preliminaries
+
 ```{r}
 knitr::opts_chunk$set(cache = TRUE)
 ```
 
-
+## Load libraries
 ```{r}
 library(tidyverse)
 library(tidyboot)
@@ -22,11 +25,12 @@ library(purrr)
 library(dplyr)
 library(tidyr)
 library(viridis)
-
 library(feather)
-
-
 theme_set(theme_few())
+```
+
+## Helper functions
+```{r}
 estimate_mode <- function(s) {
   d <- density(s)
   return(d$x[which.max(d$y)])
@@ -39,72 +43,77 @@ HPDlo<- function(s){
   m <- HPDinterval(mcmc(s))
   return(m["var1","lower"])
 }
-```
-
-## Load human data
-
-```{r}
-# df <- read_csv("ccobra_data/ragni2016_collapse.csv")
-df <- read_csv("ccobra_data/ragni2016.csv")
-
 
 count_summary_fn <- function(x) x %>% 
   summarize(n = n()) %>%
   mutate(stat = n / sum(n))
 
-mean_ci_funs <- list("ci_lower" = ci_lower, "mean" = mean, "ci_upper" = ci_upper)
+mean_ci_funs <- list("ci_lower" = ci_lower, 
+                     "mean" = mean, 
+                     "ci_upper" = ci_upper)
+```
 
+# Human data (CCOBRA, Ragni et al. 2016)
+
+```{r}
+df <- read_csv("ccobra_data/ragni2016.csv")
+```
+
+## Summarize: 95% CIs 
+
+for counts of conclusions for syllogisms
+```{r}
 df %>%
   group_by(premise_1, premise_2, conclusion) %>%
-  tidyboot(summary_function = count_summary_fn,
-           statistics_functions = function(x) x %>%
-             summarise(across(stat, mean_ci_funs, .names = "{.fn}"))) %>%
+  tidyboot(
+    summary_function = count_summary_fn,
+    statistics_functions = function(x) x %>%
+             summarise(
+               across(stat, mean_ci_funs, 
+                      .names = "{.fn}"))) %>%
   ungroup() %>% 
   rowwise() %>%
-  mutate(conclusion_quantifier = str_split(conclusion, ";")[[1]][1]) -> df.summ
+  mutate(
+    conclusion_quantifier = str_split(
+      conclusion, ";")[[1]][1]) -> df.summ
 
-
-
+# add 0s for conclusions that were never produced (for each syllogism)
 bind_rows(
   df.summ,
   df %>%
-      group_by(premise_1, premise_2, conclusion) %>%
+    group_by(premise_1, premise_2, conclusion) %>%
     count() %>% 
     ungroup() %>%
     group_by(premise_1, premise_2) %>%
-    mutate(prop = n / sum(n),
-           N = sum(n)) %>%
+    mutate(prop=n/sum(n),
+           N=sum(n)) %>%
     ungroup() %>%
     select(-n) %>%
-    pivot_wider(names_from = conclusion, values_from = prop, values_fill = 0) %>%
-    pivot_longer(c(-premise_1, -premise_2, -N), names_to = "conclusion", values_to = "proportion") %>%
-    filter(proportion == 0) %>%
-    rename(mean = proportion) %>%
+    pivot_wider(
+      names_from=conclusion, 
+      values_from=prop, 
+      values_fill=0) %>%
+    pivot_longer(
+      c(-premise_1, -premise_2, -N), 
+      names_to="conclusion", 
+      values_to="proportion") %>%
+    filter(proportion==0) %>%
+    rename(mean=proportion) %>%
     select(-N) %>%
-    mutate(n = 0, empirical_n = 0, empirical_stat = 0, ci_lower = 0, ci_upper = 0) %>%
+    mutate(n=0, 
+           empirical_n=0, 
+           empirical_stat=0, 
+           ci_lower=0, 
+           ci_upper=0) %>%
     rowwise() %>%
     mutate(
-      conclusion_quantifier = str_split(conclusion, ";")[[1]][1]
+      conclusion_quantifier = 
+        str_split(conclusion, ";")[[1]][1]
     )
 ) -> df.summ.long.wZeros
-
-
-
-
-  # count() %>% 
-  # ungroup() %>%
-  # group_by(premise_1, premise_2) %>%
-  # count_summary_fn()
-  # 
-  # mutate(prop = n / sum(n),
-  #        N = sum(n)) %>%
-  # ungroup() %>%
-  # select(-n) %>%
-  # pivot_wider(names_from = conclusion, values_from = prop, values_fill = 0) %>%
-  # pivot_longer(c(-premise_1, -premise_2, -N), names_to = "conclusion", values_to = "proportion") %>%
-  # rowwise() %>%
 ```
 
+## Split-half correlation
 
 ```{r eval = F}
 all_workers <- unique(df$id)
@@ -132,56 +141,70 @@ split_half <- function(){
 split.half.corrs <- replicate(100, split_half())
 
 mean(split.half.corrs)
+# Spearman prophecy formula
 2* mean(split.half.corrs) / (1 + mean(split.half.corrs))
 ```
 
 
-## Load model results
+# Model results
 
 ```{r}
-model.path <- "results/openmind/refac_runs_feb21/"
-# model.prefix <- "results-syllogisms-ragni2016_collapse_"
-# model.prefix <- "mll-syllogisms-ragni2016_full_"
+model.path <- "../models/results/refac_runs_feb21/"
 model.prefix <- "refac-bda-0paramPrior-syllogisms-ragni2016_full_"
+
+# thinned_iterations = seq(0, 4999, 20)
 
 model.names <- c(
   "M00_LIT_LIT", 
   "M01_LIT_PRAG_BELIEF",
-  "M02_LIT_PRAG_STATE"#, 
-  # "M10_PRAG_STATE_LIT", "M11_PRAG_STATE_PRAG_BELIEF", "M12_PRAG_STATE_PRAG_STATE",
-  # "M20_PRAG_QUD_LIT", "M21_PRAG_QUD_PRAG_BELIEF",
+  "M02_LIT_PRAG_STATE"# , 
+  # "M10_PRAG_STATE_LIT",
+  # "M11_PRAG_STATE_PRAG_BELIEF",
+  # "M12_PRAG_STATE_PRAG_STATE",
+  # "M20_PRAG_QUD_LIT",
+  # "M21_PRAG_QUD_PRAG_BELIEF",
   # "M22_PRAG_QUD_PRAG_STATE"
 )
 
 m.preds <- data.frame()
 
-m.preds <- map_dfr(model.names, function(model.type){
+m.preds <- map_dfr(model.names, 
+  function(model.type){
       
-          model.files <- list.files(
-            path = model.path,
-            # pattern = paste(model.prefix, interpretation, "-interpretation_", 
-            #                 production, "-productionKL", sep = "")
-            pattern = paste(model.prefix, 
-                            model.type,
-                            sep = "")
-          )
-          
-          map_dfr(model.files, function(model.file){
-           
-           read_csv(paste(model.path, model.file, sep = "")) %>%
-              mutate(
-                model_type = model.type,
-                chain = which(model.file == model.files) 
-                )
-            
-      })
-  
+    model.files <- list.files(
+      path = model.path,
+      pattern = paste("thinned_",
+                      model.prefix, 
+                      model.type,
+                      sep = ""))
+    
+    map_dfr(model.files, function(model.file){
+     
+     df.i = read_csv(
+       paste(model.path, 
+             model.file, sep = "")) %>%
+        mutate(
+          model_type = model.type,
+          chain = which(
+            model.file == model.files))
+     
+     # df.thinned = df.i %>%
+     #      filter(iter %in% thinned_iterations)
+     # 
+     # write_csv(df.thinned,
+     #   file = paste(model.path, "thinned_",
+     #         model.file, sep = ""))
+      
+      return(df.i)
+      
     })
-
-
+})
 ```
 
 
+5000 iter = 250mb --> 10 mb
+
+TODO: remove
 ```{r eval= F}
 model.types <- c("modular")
 # model.types <- c("modular")
@@ -239,8 +262,6 @@ m.preds <- map_dfr(model.types, function(model.type){
   })
 })
 ```
-
-
 ```{r}
 #path <- "models_10kX3_12072020.feather"
 path <- "models_10kX3_0222021.feather"
@@ -248,74 +269,17 @@ path <- "models_10kX3_0222021.feather"
 m.preds <- read_feather(path)
 ```
 
-### Gelman diagnostic
-
-```{r}
-
-# model_name <- "M01_LIT_PRAG_BELIEF"
-model_name <- "M02_LIT_PRAG_STATE"
-# model_name <- "M00_LIT_LIT"
-mh.draws1 <- m.preds %>%
-#  filter(chain == 1, model_type == "M00_LIT_LIT") %>%
-  filter(chain == 1, model_type == model_name) %>%
-  # filter(type == "parameter", premise_1 != "statePrior") %>%
-  # filter(type == "prediction") %>%
-  select(-chain, -score, -model_type) %>%
-  unite("param", c(type, premise_1, premise_2, conclusion)) %>%
-  spread(param, val) %>%
-   select(-`parameter_nvcWeight_-99_-99`) %>%
-  select(-iter) %>% 
-  mcmc(.)
-
-mh.draws2 <- m.preds %>%
-  #filter(chain == 2, model_type == "M00_LIT_LIT") %>%
-  filter(chain == 2, model_type == model_name) %>%
-  # filter(type == "parameter", premise_1 != "statePrior") %>%
-  # filter(type == "prediction") %>%
-  select(-chain, -score, -model_type) %>%
-  unite("param", c(type, premise_1, premise_2, conclusion)) %>%
-  spread(param, val) %>%
-  select(-`parameter_nvcWeight_-99_-99`) %>%
-  select(-iter) %>% 
-  mcmc(.)
-
-mh.draws3 <- m.preds %>%
-  # filter(chain == 3, model_type == "M00_LIT_LIT") %>%
-  filter(chain == 3, model_type == model_name) %>%
-  # filter(type == "parameter", premise_1 != "statePrior") %>%
-  # filter(type == "prediction") %>%
-  select(-chain, -score, -model_type) %>%
-  unite("param", c(type, premise_1, premise_2, conclusion)) %>%
-  spread(param, val) %>%
-  select(-`parameter_nvcWeight_-99_-99`) %>%
-  select(-iter) %>% 
-  mcmc(.)
-
-
-mh.list <- coda::mcmc.list(
-  list(mh.draws1, mh.draws2, mh.draws3)
-  )
-
-rhat.rs <- gelman.diag(mh.list, multivariate = FALSE)
-df.rhat <- data.frame(rhat.rs$psrf)
-
-summary(df.rhat$Point.est.)
-
-head(df.rhat, 11)
-```
 
 
 ## Parameters
 
-### Global Parameters
+Histograms of global parameters
 
 ```{r fig.width = 8}
 m.preds %>% 
   filter(type == "parameter", premise_1 != "statePrior") %>%
-  # filter(model_type == "M01_LIT_PRAG_BELIEF") %>%
   filter(val != -99) %>% 
   unite(param, c(premise_1, premise_2)) %>%
-  # unite(model, c(model_type, interpretation, production, qud, alt_utt )) %>%
   mutate(chain = factor(chain)) %>%
   ggplot(., aes( x = val, fill = chain))+
   geom_histogram(position = position_dodge())+
@@ -326,15 +290,13 @@ m.preds %>%
 
 ```
 
-
+Summarize: 95% HDI
 
 ```{r fig.width=12}
 m.preds %>% 
   filter(type == "parameter", premise_1 != "statePrior") %>%
   filter(val != -99) %>% 
-  # unite(param, c(premise_1, premise_2)) %>%
   unite(param, c(premise_1)) %>%
-  # unite(model, c(model_type, interpretation, production, qud, alt_utt)) %>%
   group_by(model_type, param) %>%
   summarize(MAP = estimate_mode(val),
             cred_upper = HPDhi(val),
@@ -347,99 +309,31 @@ ggplot(m.params.summary, aes( x = model_type, y = MAP, ymin = cred_lower,
   facet_wrap(~param, scales  = 'free') +
   coord_flip()+
   guides(fill = F)
-  # theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))
 
 m.params.summary %>% kable()
-
 ```
 
-Write out to .csv
+Write summaries to .csv (to be read to .tex file)
 
 ```{r}
 m.params.summary %>%
   mutate(paramEst = paste(
-    round(MAP, 2), " (", round(cred_lower, 2), ", ", round(cred_upper, 2), ")",
-    sep = ""
-  )) %>%
+    round(MAP, 2), " (", 
+    round(cred_lower, 2), ", ", 
+    round(cred_upper, 2), ")",
+    sep = "" )) %>%
   unite(model_param, c("model_type", "param")) %>%
   write_csv(.,
-          file = "../publications/topics/csv_to_tex/rsa_model_params_0param.csv")
+          file ="../paper/csv_to_tex/rsa_model_params_0param.csv")
 ```
-
-
-
-
-### State priors 
-
-```{r fig.width=14}
-m.preds %>% 
-    # filter( (model_type == "M00_LIT_LIT" & chain %in% c(1)  ) |
-    #       (model_type == "M01_LIT_PRAG_BELIEF" & chain %in% c(2, 3)) |
-    #       (model_type == "M02_LIT_PRAG_STATE" & chain %in% c(3)  )) %>%
-  filter(type == "parameter", premise_1 == "statePrior") %>%
-  mutate(
-    premise_2 = ifelse(is.na(premise_2), "empty", premise_2),
-    region = factor(premise_2, levels = 
-                              c("empty", "A", "B", "C", "AB", "BC", "AC", "ABC")),
-    chain = factor(chain)) %>%
-  # filter(val != -99) %>% 
-  # unite(param, c(premise_1, premise_2)) %>%
-  # unite(model, c(model_type, interpretation, production, qud, alt_utt)) %>%
-  unite(model, c(model_type)) %>%
-  ggplot(., aes( x = val, fill = chain))+
-  geom_histogram(position = position_dodge())+
-  facet_grid(model+ chain~region, scales = 'free')+
-  scale_x_continuous(limits = c(0, 1))+
-  theme(strip.text.y =  element_text(angle = 0))
-
-# ggsave("../analysis/figs/bda_ragni_stateParams2_byChain_02222021.pdf", width = 16, height = 20)
-
-```
-
-Summary of State Priors Parameters
-```{r fig.width = 7}
-m.preds %>% 
-    filter( (model_type == "M00_LIT_LIT" & chain %in% c(1)  ) |
-          (model_type == "M01_LIT_PRAG_BELIEF" & chain %in% c(2, 3)) |
-          (model_type == "M02_LIT_PRAG_STATE" & chain %in% c(3)  )) %>%
-  filter(type == "parameter", premise_1 == "statePrior") %>%
-  mutate(premise_2 = ifelse(is.na(premise_2), "empty", premise_2),
-    region = factor(premise_2, levels = 
-                              c("empty", "A", "B", "C", "AB", "BC", "AC", "ABC")),
-    chain = factor(chain)) %>%
-  #unite(model, c(model_type, interpretation, production, qud, alt_utt)) %>%
-  unite(model, c(model_type)) %>%
-  group_by(model, region) %>%
-  summarize(MAP = estimate_mode(val),
-            cred_upper = HPDhi(val),
-            cred_lower = HPDlo(val)) -> m.state.priors.summary
-
-ggplot(m.state.priors.summary, aes( x = region, y = MAP, ymin = cred_lower,
-                                    ymax = cred_upper))+
-  geom_col(position = position_dodge())+
-  geom_linerange(position = position_dodge())+
-  facet_wrap(~model, nrow = 3)
-
-m.state.priors.summary
-```
-
 
 
 ## Posterior predictions
 
 
 ```{r}
-
-
 m.summary <- m.preds %>%
   filter(type == "prediction") %>%
-    # filter( (model_type == "M00_LIT_LIT" & chain %in% c(1)  ) | # for 2 param model
-    #       (model_type == "M01_LIT_PRAG_BELIEF" & chain %in% c(2, 3)) |
-    #       (model_type == "M02_LIT_PRAG_STATE" & chain %in% c(3)  )) %>%  
-  # filter(!(chain == 4 & model_type == "modular" & interpretation == "pragmatic" & 
-   #           production == "pragmatic" & qud == "seq" & alt_utt == "Q")) %>%
-  #rename(premise_1 = param, premise_2 = property, conclusion = category) %>%
-  #group_by(model_type, interpretation, production, qud, alt_utt, premise_1, premise_2, conclusion) %>%
     group_by(model_type, premise_1, premise_2, conclusion) %>%
   summarize(MAP = estimate_mode(val),
             cred_upper = HPDhi(val),
@@ -448,37 +342,50 @@ m.summary <- m.preds %>%
 # write_csv(m.summary, "models_10kX3_11092020_summary.csv")
 ```
 
+### Main scatterplots
+
 ```{r fig.width = 6}
-md.summary <- left_join(m.summary, df.summ.long.wZeros)  %>%
-  #unite(model, c(model_type, interpretation, production, qud, alt_utt))
+md.summary <- left_join(m.summary, 
+                        df.summ.long.wZeros)  %>%
   unite(model, c(model_type))
 
 # write_csv(md.summary, "../publications/topics/cached_results/md_summary_0paramPrior.csv")
 
-md.summary <- read_csv("../publications/topics/cached_results/md_summary_0paramPrior.csv")
+# md.summary <- read_csv("../publications/topics/cached_results/md_summary_0paramPrior.csv")
+
+model_order = c("M00_LIT_LIT",
+                "M02_LIT_PRAG_STATE",           
+                "M01_LIT_PRAG_BELIEF")
+
+model_labels = c("Literal Speaker",
+    "State Communication\n(Pragmatic Speaker)",
+    "Belief Alignment\n(Pragmatic Speaker)")
+
+quantifier_order =  c("All", "Some", 
+                      "Some not", "No", "NVC")
+
+quantifier_labels = c("All", "Some", 
+                      "Some...not",
+                      "None",
+                      "nothing follows")
 
 md.summary %>%
-    mutate(model = factor(model,
-                        levels = c("M00_LIT_LIT", "M02_LIT_PRAG_STATE",
-                                   "M01_LIT_PRAG_BELIEF"),
-                        labels = c("Literal Speaker",
-                                   "State Communication\n(Pragmatic Speaker)",
-                                   "Belief Alignment\n(Pragmatic Speaker)")),
-         conclusion_quantifier = factor(conclusion_quantifier,
-                                        levels = c("All", "Some", "Some not", "No", "NVC"),
-                                        labels = c("All", "Some", "Some...not", "None",
-                                                   "nothing follows"))) %>%
+    mutate(model=factor(model,
+                        levels=model_order,
+                        labels=model_labels),
+  conclusion_quantifier =factor(conclusion_quantifier,                          levels=quantifier_order,
+                        labels=quantifier_labels)) %>%
   ggplot(., aes( x = MAP, y = mean, 
                  fill = conclusion_quantifier,
                  xmin = cred_lower, xmax = cred_upper,
                  ymin = ci_lower, ymax = ci_upper))+
-  geom_abline(intercept = 0, slope = 1, lty = 3, alpha = 0.3)+
+  geom_abline(intercept = 0, slope = 1, 
+              lty = 3, alpha = 0.3)+
   geom_linerange(alpha = 0.4)+
-  ggstance::geom_linerangeh( alpha = 0.4 )+
+  ggstance::geom_linerangeh(alpha=0.4)+
   geom_point(shape = 21, size = 1.5)+
   scale_x_continuous(limits = c(0, 1), breaks = c(0, 1))+
   scale_y_continuous(limits = c(0, 1), breaks = c(0, 1))+
-  # facet_grid(interpretation ~ production)+
   guides(fill = guide_legend(title = "Conclusion\nQuantifier"))+
   facet_wrap( ~ model, nrow = 1)+
   coord_fixed(ratio = 1)+
@@ -487,35 +394,11 @@ md.summary %>%
     y = "Human Conclusions\n(proportion)"
   )
 
-  # ggplot(., aes( x = model_mean, xmin = model_lower, xmax = model_upper, 
-  #                fill = conclusion_quantifier,
-  #                y = mean, ymin = ci_lower, ymax = ci_upper))+
-  # geom_abline(intercept = 0, slope = 1, lty = 3, alpha = 0.3)+
-  # geom_linerange(alpha = 0.4)+
-  # ggstance::geom_linerangeh( alpha = 0.4 )+
-  # geom_point(shape = 21, size = 1.5)+
-  # scale_x_continuous(limits = c(0, 1), breaks = c(0, 1))+
-  # scale_y_continuous(limits = c(0, 1), breaks = c(0, 1))+
-  # #xlim(0, 1) + ylim(0, 1)+
-  # coord_fixed()+
-  # guides(fill = guide_legend(title = "Conclusion quantifier"))+
-  # #scale_fill
-  # #scale_fill_viridis(discrete = T, option = "E")+
-  # facet_wrap(~model, nrow = 1)+
-  # labs(
-  #   x = "Model Prediction (mean)",
-  #   y = "Human Conclusions\n(proportion)"
-  # )
-
-
-
-
-# ggsave("../publications/topics/figs/bda_rsa_scatters_0paramPrior.pdf", width = 9.2, height = 3.2)
-
-
   # ggsave("../analysis/figs/bda_ragni_scatters_02222021a.pdf", width = 12, height = 8)
 
 ```
+
+Summary statistics
 
 ```{r}
 md.summary %>%
@@ -528,36 +411,17 @@ md.summary %>%
   kable(.)
 ```
 
-### Full posterior distribution for predictions
-
-```{r}
-m.preds %>%
-  filter(type == "prediction", model_type == "M01_LIT_PRAG_BELIEF") %>%
-  filter(premise_1 %in% c("No;A;B", "All;A;B", "Some not;A;B", "Some;A;B"),
-         premise_2 %in% c("No;B;C", "All;B;C", "Some not;B;C", "Some;B;C")) -> m.preds.filtered
-
-m.preds.filtered %>%
-  ggplot(., aes( x = val, fill = conclusion))+
-  geom_histogram(color = 'black')+
-  facet_grid(premise_1 + premise_2 ~ conclusion, scales = 'free')+
-  scale_fill_viridis(discrete = T)
-  
-ggsave("../analysis/figs/bda_ragni_postPred_histograms.pdf", width = 20, height = 12)
-
-```
 
 
-### NVC
+
+### Nothing Follows scatterplot
 
 ```{r fig.width = 6}
 md.summary  %>%
   filter(conclusion_quantifier == "NVC") %>%
   mutate(model = factor(model,
-                        levels = c("M00_LIT_LIT", "M02_LIT_PRAG_STATE",
-                                   "M01_LIT_PRAG_BELIEF"),
-                        labels = c("Literal Speaker",
-                                   "State Communication\n(Pragmatic Speaker)",
-                                   "Belief Alignment\n(Pragmatic Speaker)"))) %>%
+                        levels=model_order,
+                        labels=model_labels)) %>%
   ggplot(., aes( x = MAP, y = mean,
                  xmin = cred_lower, xmax = cred_upper,
                  ymin = ci_lower, ymax=ci_upper))+
@@ -572,8 +436,10 @@ md.summary  %>%
   xlab('Model Prediction\n ("Nothing Follows")')+
   ylab('Human Proportion\n ("Nothing Follows")')
 
-ggsave("../publications/topics/figs/bda_rsa_scatters_0paramPrior_nvc.pdf", width = 6.5, height = 3)
+# ggsave("../publications/topics/figs/bda_rsa_scatters_0paramPrior_nvc.pdf", width = 6.5, height = 3)
 ```
+
+Summary statistics 
 
 ```{r}
 md.summary  %>%
@@ -589,58 +455,10 @@ md.summary  %>%
 
 
 
-```{r}
-best.models <- c(
-  "modular_pragmatic_literal_seq_quantifier",
-  "modular_pragmatic_pragmatic_AC_quantifier",
-  "modular_pragmatic_pragmatic_seq_quantifier",
-  "modular_pragmatic_pragmatic_state_quantifier"
-)
-```
 
-
-
-
-### **Quantifier choice**
-
-model-fit by conclusion quantifier
-
-
-```{r fig.width = 12}
-md.summary %>%
-  filter(model %in% best.models) %>%
-  ggplot(., aes( x = MAP, y = proportion, color = conclusion_quantifier,
-                 xmin = cred_lower, xmax = cred_upper))+
-  geom_abline(intercept = 0, slope = 1, lty = 3, alpha = 0.3)+
-  geom_point()+
-  ggstance::geom_linerangeh(alpha = 0.3)+
-  facet_grid(model ~ conclusion_quantifier)+
-  coord_fixed(ratio = 1)+
-  theme(strip.text.y = element_text(angle = 0))+
-  xlim(0, 1)+
-  ylim(0, 1)
-```
-
-
-
-### **Term order**
-
-how often does the model pick "A-C" vs. "C-A" (in comparison to people)
-
-
-
-
-## Residuals analysis
+### Analyze residuals
 
 ```{r, eval = F}
-
-best.models <- c(
-  #"integrated_pragmatic_literal_grounded_Q",
-  "M00_LIT_LIT",
-  "M01_LIT_PRAG_BELIEF",
-  "M02_LIT_PRAG_STATE"
-)
-
 # Compute Sum Sq Err for each syllogism/model
 md.summary %>% 
   filter(model == "M01_LIT_PRAG_BELIEF") %>%
@@ -674,9 +492,8 @@ md.err[with(md.err, order(-sum_sq_err)), ] %>%
   pull(syllogism) -> best.syllogisms
 
 # subset data frame to only top/bottom syllogisms
-
 md.summary %>% 
-  filter(model %in% best.models) %>%
+  filter(model %in% model_order) %>%
   unite(syllogism, c(premise_1, premise_2)) -> md.summary.residuals # %>%
   # filter(syllogism %in% best.worst.syllogisms) 
 
@@ -693,12 +510,10 @@ bind_rows(
     distinct(syllogism, conclusion, MAP, cred_upper, cred_lower, conclusion_quantifier) %>%
     mutate(model = "data")
 ) -> md.summary.residuals.long
+```
 
-
-# left_join(
-#   md.summary.residuals.long,
-#   md.err
-# ) 
+#### Best-fitting syllogisms
+```{r}
 md.summary.residuals.long %>%
   filter(syllogism %in% best.syllogisms) %>%
   mutate(conclusion = factor(conclusion, levels = c(
@@ -713,7 +528,9 @@ md.summary.residuals.long %>%
   theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))
 
 # ggsave("../analysis/figs/bda_ragni_litPrag_v_pragPrag_bestFitSyll_12142020.pdf", width = 14, height = 6)
-
+```
+#### Worst-fitting syllogisms 
+```{r}
 md.summary.residuals.long %>%
   filter(syllogism %in% worst.syllogisms) %>%
   mutate(conclusion = factor(conclusion, levels = c(
@@ -731,38 +548,9 @@ md.summary.residuals.long %>%
 #        width = 14, height = 6)
 ```
 
-Residuals for NVC
-
-```{r}
-# Compute Sum Sq Err for each syllogism/model
-md.summary %>% 
-  filter(model == "M01_LIT_PRAG_BELIEF", conclusion_quantifier == "NVC") %>%
-  group_by(model, premise_1, premise_2) %>%
-  summarize(sum_sq_err = (MAP - mean)^2) %>%
-  ungroup() %>%
-  unite(syllogism, c(premise_1, premise_2)) -> md.err.nvc
-
-# bottom 10 only...
-md.err.nvc[with(md.err.nvc, order(-sum_sq_err)), ] %>%
-  head(10) %>%
-  distinct(syllogism) %>%
-  pull(syllogism) -> worst.nvc.syllogisms
 
 
-# top 10 only...
-md.err.nvc[with(md.err.nvc, order(-sum_sq_err)), ] %>%
-  tail(10) %>%
-  distinct(syllogism) %>%
-  pull(syllogism) -> best.nvc.syllogisms
-
-```
-
-
-
-
-
-
-## Bar plots
+### Bar plots
 
 ```{r}
 md.summary.residuals.long %>%
@@ -807,273 +595,9 @@ ggplot(md.summary.residuals.long.bars, aes ( x = model, y = MAP,
     x = ""
   )
 
-ggsave("../publications/topics/figs/bda_rsa_bars_0params.pdf", width = 11, height = 7)
+# ggsave("../publications/topics/figs/bda_rsa_bars_0params.pdf", width = 11, height = 7)
 
 ```
-
-
-
-Examination of "nothing follows"
-
-```{r}
-d.summary.human.bars.nvc <- md.summary.residuals.long.bars  %>%
-  filter(Conclusion == "Nothing follows", model == "Belief Alignment")
-
-md.summary.residuals.long.bars %>%
-  filter(Conclusion == "Nothing follows") %>%
-  mutate(syllogism = factor(syllogism,
-                             levels = with(d.summary.human.bars.nvc,
-                                           syllogism[order(-MAP)]))) %>%
-  ggplot(., aes ( x = syllogism, y = MAP, ymin = cred_lower, ymax = cred_upper,
-                fill = model))+
-  geom_col(position = position_dodge(bar.width), 
-           width = bar.width, 
-           color = 'black',
-           alpha = 0.8)+
-  geom_linerange(position = position_dodge(bar.width))+
-  scale_fill_viridis(discrete = T)+
-  facet_wrap(~model, nrow = 1)+
-  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))+
-  labs(
-    y = "Predicted probability / Empirical proportion",
-    x = ""
-  )
-```
-
-
-
-
-```{r}
-# Compute Sum Sq Err for each syllogism/model
-md.summary %>% 
-  filter(model %in% c("M00_LIT_LIT",
-  "M01_LIT_PRAG_BELIEF")) %>%
-  group_by(model, premise_1, premise_2) %>%
-  summarize(sum_sq_err = sum((MAP - mean)^2)) %>%
-  ungroup() %>%
-  unite(syllogism, c(premise_1, premise_2)) -> md.err.m
-
-md.err.m %>%
-  pivot_wider(names_from = model, values_from = sum_sq_err) %>%
-  rowwise() %>%
-  mutate(lit_minus_belief = M00_LIT_LIT - 
-           M01_LIT_PRAG_BELIEF) %>% View()
-```
-
-KL Divergence
-
-```{r}
-
-md.summary %>%
-  group_by(model, premise_1, premise_2, conclusion) %>%
-  mutate(div = ifelse( mean == 0, 0, mean * log( mean / MAP))) %>%
-  group_by(model, premise_1, premise_2) %>%
-  summarize(
-    KL = sum(div)
-    ) -> md.kl
-
-
-md.summary %>%
-  filter(model %in% c("M00_LIT_LIT",
-  "M01_LIT_PRAG_BELIEF"#,
-    #"modular_pragmatic_pragmatic_state_quantifier"
-    )) %>%
-    group_by(model, premise_1, premise_2) %>%
-  summarize(sum_sq_err = sum((MAP - mean)^2)) %>%
-  ungroup() %>%
-  unite(syllogism, c(premise_1, premise_2)) %>%
-  pivot_wider(names_from = model, values_from = sum_sq_err) %>%
-  mutate(dev_err = M00_LIT_LIT - 
-           M01_LIT_PRAG_BELIEF) -> md.err.model.wide
-
-md.kl %>%
-  ggplot(., aes ( x = KL ))+
-  geom_histogram()+
-  facet_wrap(~model)
-
-md.kl %>%
-  filter(model %in% c(
-    "M00_LIT_LIT",
-    "M01_LIT_PRAG_BELIEF"#,
-    #"modular_pragmatic_pragmatic_state_quantifier"
-    )) %>%
-  pivot_wider(names_from = model, values_from = KL) %>%
-  mutate(dev_KL = M00_LIT_LIT - 
-           M01_LIT_PRAG_BELIEF)  -> md.kl.model.wide
-
-# find syllogisms for which AC model fits better than state model
-# md.kl.model.wide %>%
-#   mutate(dev_KL = modular_literal_pragmatic_state_NA - 
-#            modular_pragmatic_pragmatic_AC_quantifier) %>%
-#   # mutate(dev_KL = modular_pragmatic_pragmatic_state_quantifier - 
-#   #          modular_pragmatic_pragmatic_AC_quantifier) %>%
-#   View()
-  
-md.kl.model.wide %>%
-  ggplot(., aes(x = M01_LIT_PRAG_BELIEF, 
-                y = M00_LIT_LIT))+
-  geom_point()+
-  coord_fixed()+
-  xlim(0, 1)+
-  ylim(0, 1)+
-  geom_abline(intercept = 0, slope = 1, lty = 3, alpha = 0.3)
-    
-```
-
-Cases where Pragmatic Interpretation model does better than Literal Interpretation
-
-```{r}
-md.kl.model.wide[with(md.kl.model.wide, order(-dev_KL)), ] %>%
-  unite(syllogism, c(premise_1, premise_2)) %>%
-  head(10) %>%
-  distinct(syllogism) %>%
-  pull(syllogism) -> max.dev.syll
-
-md.err.model.wide[with(md.err.model.wide, order(-dev_err)), ] %>%
-  head(10) %>%
-  distinct(syllogism) %>%
-  pull(syllogism) -> max.dev.err.syll
-
-md.summary.residuals.long %>%
-  filter(syllogism %in% max.dev.err.syll) %>%
-  mutate(conclusion = factor(conclusion, levels = c(
-      "All;A;C","All;C;A", "Some;A;C", "Some;C;A", "Some not;A;C", 
-      "Some not;C;A", "No;A;C", "No;C;A", "NVC;"
-    )),
-    syllogism = factor(syllogism, levels = max.dev.err.syll)) %>%
-  ggplot(., aes ( x = model, y = MAP, ymin = cred_upper, ymax = cred_upper,
-                fill = conclusion))+
-  geom_col(position = position_dodge(), color = 'black')+
-  geom_linerange(position = position_dodge())+
-  scale_fill_viridis(discrete = T)+
-  facet_wrap(~syllogism, nrow = 2)+
-  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))
-
-  ggsave("../analysis/figs/bda_ragni_maxDevErr_litPrag_v_pragPrag_worstFitSyll_12142020.pdf", 
-       width = 14, height = 6)
-```
-
-
-Cases where Literal Interpretation model does better than Pragmatic Interpretation
-
-```{r}
-md.kl.model.wide[with(md.kl.model.wide, order(dev_KL)), ] %>%
-  unite(syllogism, c(premise_1, premise_2)) %>%
-  head(10) %>%
-  distinct(syllogism) %>%
-  pull(syllogism) -> min.dev.syll
-
-md.err.model.wide[with(md.err.model.wide, order(dev_err)), ] %>%
-  head(10) %>%
-  distinct(syllogism) %>%
-  pull(syllogism) -> min.dev.err.syll
-
-md.summary.residuals.long %>%
-  filter(syllogism %in% min.dev.syll) %>%
-  mutate(conclusion = factor(conclusion, levels = c(
-      "All;A;C","All;C;A", "Some;A;C", "Some;C;A", "Some not;A;C", "Some not;C;A", "No;A;C", "No;C;A", "NVC;"
-    )),
-    syllogism = factor(syllogism, levels = min.dev.syll)) %>%
-  ggplot(., aes ( x = model, y = MAP, ymin = cred_upper, ymax = cred_upper,
-                fill = conclusion))+
-  geom_col(position = position_dodge(), color = 'black')+
-  geom_linerange(position = position_dodge())+
-  scale_fill_viridis(discrete = T)+
-  facet_wrap(~syllogism, nrow = 2)+
-  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))
-
-ggsave("../analysis/figs/bda_ragni_minDev_litPrag_v_pragPrag_worstFitSyll_12142020.pdf", 
-       width = 14, height = 6)
-```
-
-
-Cases where literal interpretation is most different from pragmatic interpretation
-
-```{r}
-md.summary %>%
-  filter(model %in% c(
-    "modular_literal_pragmatic_state_NA",
-    "modular_pragmatic_pragmatic_AC_quantifier"#,
-    #"modular_pragmatic_pragmatic_state_quantifier"
-    )) %>%
-  select(model, premise_1, premise_2, conclusion, MAP) %>%
-  pivot_wider(names_from = model, values_from = MAP) %>%
-  group_by(premise_1, premise_2) %>%
-  summarize(sum_sq_err = sum( (modular_literal_pragmatic_state_NA - modular_pragmatic_pragmatic_AC_quantifier) ^2 )) %>%
-  ungroup() %>%
-  unite(syllogism, c(premise_1, premise_2)) -> m.dev.lit.prag
-
-m.dev.lit.prag[with(m.dev.lit.prag, order(-sum_sq_err)), ] %>%
-  head(10) %>%
-  distinct(syllogism) %>%
-  pull(syllogism) -> max.dev.models.syll
-
-md.summary.residuals.long %>%
-  filter(syllogism %in% max.dev.models.syll) %>%
-  mutate(conclusion = factor(conclusion, levels = c(
-      "All;A;C","All;C;A", "Some;A;C", "Some;C;A", "Some not;A;C", "Some not;C;A", "No;A;C", "No;C;A", "NVC;"
-    )),
-    syllogism = factor(syllogism, levels = max.dev.models.syll)) %>%
-  ggplot(., aes ( x = model, y = MAP, ymin = cred_upper, ymax = cred_upper,
-                fill = conclusion))+
-  geom_col(position = position_dodge(), color = 'black')+
-  geom_linerange(position = position_dodge())+
-  scale_fill_viridis(discrete = T)+
-  facet_wrap(~syllogism, nrow = 2)+
-  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))
-
-ggsave("../analysis/figs/bda_ragni_maxDevModels_litPrag_v_pragPrag_12152020.pdf", 
-       width = 14, height = 6)
-```
-
-
-## Full bar plots
-
-```{r fig.width = 20, eval = F}
-# turn data frame into long form for bar plots
-bind_rows(
-  md.summary %>%
-    select(-N, -proportion),
-  md.summary %>%
-    mutate(MAP = proportion,
-           cred_upper = proportion,
-           cred_lower = proportion) %>%
-    select(-model, -proportion, -N) %>%
-    distinct(premise_1, premise_2, conclusion, MAP, cred_upper, cred_lower, conclusion_quantifier) %>%
-    mutate(model = "data")
-) -> md.summary.long
-
-
-md.summary.long %>%
-  filter(model %in% c(best.models, "data")) %>%
-  mutate(
-    conclusion = factor(conclusion, levels = c(
-      "All;A;C","All;C;A", "Some;A;C", "Some;C;A", "Some not;A;C", "Some not;C;A", "No;A;C", "No;C;A", "NVC;"
-    )),
-    premise_1 = factor(premise_1, levels = c("All;A;B",
-                                             "All;B;A", 
-                                             "Some;A;B", "Some;B;A", 
-                                             "Some not;A;B", "Some not;B;A", 
-                                             "No;A;B", "No;B;A")),
-    premise_2 = factor(premise_2, levels = c("All;B;C",
-                                             "All;C;B", 
-                                             "Some;B;C", "Some;C;B", 
-                                             "Some not;B;C", "Some not;C;B", 
-                                             "No;B;C", "No;C;B")),
-  ) %>%
-  ggplot(., aes ( x = model, y = MAP, 
-                fill = conclusion, group = conclusion))+
-  geom_col(position = position_dodge(), color = 'black')+
-  # geom_errorbar(position = position_dodge(),
-  #               aes(ymin = cred_upper, ymax = cred_upper))+
-  scale_fill_viridis(discrete = T)+
-  facet_grid(premise_2~premise_1)+
-  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))
-
-ggsave("../analysis/figs/bda_ragni_4models_bars_11092020.pdf", width = 20, height = 12)
-```
-
-
 
 # Model Comparison
 
@@ -1222,7 +746,332 @@ m.mll %>%
 ```
 
 
-#### _depracated: Quantifier choice
+
+# Auxiliary analyses
+
+### Gelman diagnostic
+
+```{r}
+# model_name <- "M01_LIT_PRAG_BELIEF"
+model_name <- "M02_LIT_PRAG_STATE"
+# model_name <- "M00_LIT_LIT"
+mh.draws1 <- m.preds %>%
+#  filter(chain == 1, model_type == "M00_LIT_LIT") %>%
+  filter(chain == 1, model_type == model_name) %>%
+  # filter(type == "parameter", premise_1 != "statePrior") %>%
+  # filter(type == "prediction") %>%
+  select(-chain, -score, -model_type) %>%
+  unite("param", c(type, premise_1, premise_2, conclusion)) %>%
+  spread(param, val) %>%
+   select(-`parameter_nvcWeight_-99_-99`) %>%
+  select(-iter) %>% 
+  mcmc(.)
+
+mh.draws2 <- m.preds %>%
+  #filter(chain == 2, model_type == "M00_LIT_LIT") %>%
+  filter(chain == 2, model_type == model_name) %>%
+  # filter(type == "parameter", premise_1 != "statePrior") %>%
+  # filter(type == "prediction") %>%
+  select(-chain, -score, -model_type) %>%
+  unite("param", c(type, premise_1, premise_2, conclusion)) %>%
+  spread(param, val) %>%
+  select(-`parameter_nvcWeight_-99_-99`) %>%
+  select(-iter) %>% 
+  mcmc(.)
+
+mh.draws3 <- m.preds %>%
+  # filter(chain == 3, model_type == "M00_LIT_LIT") %>%
+  filter(chain == 3, model_type == model_name) %>%
+  # filter(type == "parameter", premise_1 != "statePrior") %>%
+  # filter(type == "prediction") %>%
+  select(-chain, -score, -model_type) %>%
+  unite("param", c(type, premise_1, premise_2, conclusion)) %>%
+  spread(param, val) %>%
+  select(-`parameter_nvcWeight_-99_-99`) %>%
+  select(-iter) %>% 
+  mcmc(.)
+
+
+mh.list <- coda::mcmc.list(
+  list(mh.draws1, mh.draws2, mh.draws3)
+  )
+
+rhat.rs <- gelman.diag(mh.list, multivariate = FALSE)
+df.rhat <- data.frame(rhat.rs$psrf)
+
+summary(df.rhat$Point.est.)
+
+head(df.rhat, 11)
+```
+
+### Full posterior for predictions
+
+For a subset of syllogisms
+
+```{r}
+m.preds %>%
+  filter(type == "prediction", model_type == "M01_LIT_PRAG_BELIEF") %>%
+  filter(premise_1 %in% c("No;A;B", "All;A;B", "Some not;A;B", "Some;A;B"),
+         premise_2 %in% c("No;B;C", "All;B;C", "Some not;B;C", "Some;B;C")) -> m.preds.filtered
+
+m.preds.filtered %>%
+  ggplot(., aes( x = val, fill = conclusion))+
+  geom_histogram(color = 'black')+
+  facet_grid(premise_1 + premise_2 ~ conclusion, scales = 'free')+
+  scale_fill_viridis(discrete = T)
+  
+# ggsave("../analysis/figs/bda_ragni_postPred_histograms.pdf", width = 20, height = 12)
+
+```
+
+### Residuals for Nothing Follows 
+
+```{r}
+# Compute Sum Sq Err for each syllogism/model
+md.summary %>% 
+  filter(model == "M01_LIT_PRAG_BELIEF", conclusion_quantifier == "NVC") %>%
+  group_by(model, premise_1, premise_2) %>%
+  summarize(sum_sq_err = (MAP - mean)^2) %>%
+  ungroup() %>%
+  unite(syllogism, c(premise_1, premise_2)) -> md.err.nvc
+
+# bottom 10 only...
+md.err.nvc[with(md.err.nvc, order(-sum_sq_err)), ] %>%
+  head(10) %>%
+  distinct(syllogism) %>%
+  pull(syllogism) -> worst.nvc.syllogisms
+
+
+# top 10 only...
+md.err.nvc[with(md.err.nvc, order(-sum_sq_err)), ] %>%
+  tail(10) %>%
+  distinct(syllogism) %>%
+  pull(syllogism) -> best.nvc.syllogisms
+
+```
+
+### Examination of "nothing follows"
+
+```{r}
+d.summary.human.bars.nvc <- md.summary.residuals.long.bars  %>%
+  filter(Conclusion == "Nothing follows", model == "Belief Alignment")
+
+md.summary.residuals.long.bars %>%
+  filter(Conclusion == "Nothing follows") %>%
+  mutate(syllogism = factor(syllogism,
+                             levels = with(d.summary.human.bars.nvc,
+                                           syllogism[order(-MAP)]))) %>%
+  ggplot(., aes ( x = syllogism, y = MAP, ymin = cred_lower, ymax = cred_upper,
+                fill = model))+
+  geom_col(position = position_dodge(bar.width), 
+           width = bar.width, 
+           color = 'black',
+           alpha = 0.8)+
+  geom_linerange(position = position_dodge(bar.width))+
+  scale_fill_viridis(discrete = T)+
+  facet_wrap(~model, nrow = 1)+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))+
+  labs(
+    y = "Predicted probability / Empirical proportion",
+    x = ""
+  )
+```
+
+### Analysis of model fits and distinct model predictions
+
+Compute Sum Sq Err for each syllogism/model
+
+```{r}
+md.summary %>% 
+  filter(model %in% c("M00_LIT_LIT",
+  "M01_LIT_PRAG_BELIEF")) %>%
+  group_by(model, premise_1, premise_2) %>%
+  summarize(sum_sq_err = sum((MAP - mean)^2)) %>%
+  ungroup() %>%
+  unite(syllogism, c(premise_1, premise_2)) -> md.err.m
+
+md.err.m %>%
+  pivot_wider(names_from = model, values_from = sum_sq_err) %>%
+  rowwise() %>%
+  mutate(lit_minus_belief = M00_LIT_LIT - 
+           M01_LIT_PRAG_BELIEF) %>% View()
+```
+
+KL Divergence
+
+```{r}
+md.summary %>%
+  group_by(model, premise_1, premise_2, conclusion) %>%
+  mutate(div = ifelse( mean == 0, 0, mean * log( mean / MAP))) %>%
+  group_by(model, premise_1, premise_2) %>%
+  summarize(
+    KL = sum(div)
+    ) -> md.kl
+
+md.summary %>%
+  filter(model %in% c("M00_LIT_LIT",
+  "M01_LIT_PRAG_BELIEF"
+    )) %>%
+    group_by(model, premise_1, premise_2) %>%
+  summarize(sum_sq_err = sum((MAP - mean)^2)) %>%
+  ungroup() %>%
+  unite(syllogism, c(premise_1, premise_2)) %>%
+  pivot_wider(names_from = model, values_from = sum_sq_err) %>%
+  mutate(dev_err = M00_LIT_LIT - 
+           M01_LIT_PRAG_BELIEF) -> md.err.model.wide
+
+md.kl %>%
+  ggplot(., aes ( x = KL ))+
+  geom_histogram()+
+  facet_wrap(~model)
+
+md.kl %>%
+  filter(model %in% c(
+    "M00_LIT_LIT",
+    "M01_LIT_PRAG_BELIEF")) %>%
+  pivot_wider(names_from = model, values_from = KL) %>%
+  mutate(dev_KL = M00_LIT_LIT - 
+           M01_LIT_PRAG_BELIEF)  -> md.kl.model.wide
+
+# find syllogisms for which AC model fits better than state model
+  
+md.kl.model.wide %>%
+  ggplot(., aes(x = M01_LIT_PRAG_BELIEF, 
+                y = M00_LIT_LIT))+
+  geom_point()+
+  coord_fixed()+
+  xlim(0, 1)+
+  ylim(0, 1)+
+  geom_abline(intercept = 0, slope = 1, lty = 3, alpha = 0.3)
+    
+```
+
+Cases where Pragmatic Interpretation model does better than Literal Interpretation
+
+```{r}
+md.kl.model.wide[with(md.kl.model.wide, order(-dev_KL)), ] %>%
+  unite(syllogism, c(premise_1, premise_2)) %>%
+  head(10) %>%
+  distinct(syllogism) %>%
+  pull(syllogism) -> max.dev.syll
+
+md.err.model.wide[with(md.err.model.wide, order(-dev_err)), ] %>%
+  head(10) %>%
+  distinct(syllogism) %>%
+  pull(syllogism) -> max.dev.err.syll
+
+md.summary.residuals.long %>%
+  filter(syllogism %in% max.dev.err.syll) %>%
+  mutate(conclusion = factor(conclusion, levels = c(
+      "All;A;C","All;C;A", "Some;A;C", "Some;C;A", "Some not;A;C", 
+      "Some not;C;A", "No;A;C", "No;C;A", "NVC;"
+    )),
+    syllogism = factor(syllogism, levels = max.dev.err.syll)) %>%
+  ggplot(., aes ( x = model, y = MAP, ymin = cred_upper, ymax = cred_upper,
+                fill = conclusion))+
+  geom_col(position = position_dodge(), color = 'black')+
+  geom_linerange(position = position_dodge())+
+  scale_fill_viridis(discrete = T)+
+  facet_wrap(~syllogism, nrow = 2)+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))
+
+  # ggsave("../analysis/figs/bda_ragni_maxDevErr_litPrag_v_pragPrag_worstFitSyll_12142020.pdf", 
+  #      width = 14, height = 6)
+```
+
+
+Cases where Literal Interpretation model does better than Pragmatic Interpretation
+
+```{r}
+md.kl.model.wide[with(md.kl.model.wide, order(dev_KL)), ] %>%
+  unite(syllogism, c(premise_1, premise_2)) %>%
+  head(10) %>%
+  distinct(syllogism) %>%
+  pull(syllogism) -> min.dev.syll
+
+md.err.model.wide[with(md.err.model.wide, order(dev_err)), ] %>%
+  head(10) %>%
+  distinct(syllogism) %>%
+  pull(syllogism) -> min.dev.err.syll
+
+md.summary.residuals.long %>%
+  filter(syllogism %in% min.dev.syll) %>%
+  mutate(conclusion = factor(conclusion, levels = c(
+      "All;A;C","All;C;A", "Some;A;C", "Some;C;A", "Some not;A;C", "Some not;C;A", "No;A;C", "No;C;A", "NVC;"
+    )),
+    syllogism = factor(syllogism, levels = min.dev.syll)) %>%
+  ggplot(., aes ( x = model, y = MAP, ymin = cred_upper, ymax = cred_upper,
+                fill = conclusion))+
+  geom_col(position = position_dodge(), color = 'black')+
+  geom_linerange(position = position_dodge())+
+  scale_fill_viridis(discrete = T)+
+  facet_wrap(~syllogism, nrow = 2)+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))
+
+# ggsave("../analysis/figs/bda_ragni_minDev_litPrag_v_pragPrag_worstFitSyll_12142020.pdf", 
+#        width = 14, height = 6)
+```
+
+
+
+
+
+
+### State priors 
+
+These are boring plots, as the parameters are fixed to 0.5 for the main models.
+
+```{r fig.width=14}
+m.preds %>% 
+  filter(type == "parameter", 
+         premise_1 == "statePrior") %>%
+  mutate(
+    premise_2 = ifelse(is.na(premise_2), 
+                       "empty", premise_2),
+    region = factor(
+      premise_2, levels = 
+        c("empty", "A", "B", "C", 
+          "AB", "BC", "AC", "ABC")),
+    chain = factor(chain)) %>%
+  unite(model, c(model_type)) %>%
+  ggplot(., aes( x = val, fill = chain))+
+  geom_histogram(position = position_dodge())+
+  facet_grid(model+ chain~region, scales = 'free')+
+  scale_x_continuous(limits = c(0, 1))+
+  theme(strip.text.y =  element_text(angle = 0))
+
+# ggsave("../analysis/figs/bda_ragni_stateParams2_byChain_02222021.pdf", width = 16, height = 20)
+```
+
+Summary of State Priors Parameters
+```{r fig.width = 7}
+m.preds %>% 
+    filter( (model_type == "M00_LIT_LIT" & chain %in% c(1)  ) |
+          (model_type == "M01_LIT_PRAG_BELIEF" & chain %in% c(2, 3)) |
+          (model_type == "M02_LIT_PRAG_STATE" & chain %in% c(3)  )) %>%
+  filter(type == "parameter", premise_1 == "statePrior") %>%
+  mutate(premise_2 = ifelse(is.na(premise_2), "empty", premise_2),
+    region = factor(premise_2, levels = 
+                              c("empty", "A", "B", "C", "AB", "BC", "AC", "ABC")),
+    chain = factor(chain)) %>%
+  unite(model, c(model_type)) %>%
+  group_by(model, region) %>%
+  summarize(MAP = estimate_mode(val),
+            cred_upper = HPDhi(val),
+            cred_lower = HPDlo(val)) -> m.state.priors.summary
+
+ggplot(m.state.priors.summary, aes( x = region, y = MAP, ymin = cred_lower,
+                                    ymax = cred_upper))+
+  geom_col(position = position_dodge())+
+  geom_linerange(position = position_dodge())+
+  facet_wrap(~model, nrow = 3)
+
+m.state.priors.summary
+```
+
+
+
+# _depracated: Quantifier choice
 
 how often does the model pick "some" vs. "all" (in comparison to people)
 
