@@ -1,4 +1,4 @@
-#### Companion repository to Tessler, Tenenbaum, and Goodman "Logic, probability, and pragmatics in syllogistic reasoning". *Topics in Cognitive Science*
+#### Companion repository to Tessler, Tenenbaum, and Goodman "Logic, probability, and pragmatics in syllogistic reasoning". *Topics in Cognitive Science* [link to journal paper](https://onlinelibrary.wiley.com/share/author/XMD4PYST88P9XIAG653K?target=10.1111/tops.12593)
 
 
 **Directory**
